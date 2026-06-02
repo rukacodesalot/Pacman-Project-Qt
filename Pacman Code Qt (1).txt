@@ -1,0 +1,457 @@
+﻿Skip to content
+Using Gmail with screen readers
+
+
+
+
+	
+
+	1 of 10,545
+pacman project code
+Inbox
+  
+
+
+
+Mohamed Abdelhameed <mohamed.abdelhameed7613@gmail.com>
+	
+
+	1:29 AM (6 minutes ago)
+	
+
+	
+
+	
+
+to me
+	
+
+	//main.cpp
+#include "mainwindow.h"
+#include <QApplication>
+
+
+int main(int argc, char *argv[]) {
+    QApplication app(argc, argv);
+    MainWindow window;
+    window.show();
+    return app.exec();
+}
+
+
+//mainwindow.cpp
+#include "mainwindow.h"
+#include "pacman.h"
+#include <QPainter>
+#include <QTimer>
+#include <QKeyEvent>
+#include <QPixmap>
+#include <QDebug>
+#include <cstdlib>
+#include <ctime>
+#include<QMessageBox>
+#include <QMediaPlayer>
+#include <QAudioOutput>   // Qt6 for audio output control (Qt5 uses setMedia directly)
+
+
+
+
+MainWindow::MainWindow(QWidget *parent)
+    : QMainWindow(parent), pacman(new Pacman(this)), timer(new QTimer(this)), score(0),
+    enemyPos(100, 100), enemyDx(10), enemyDy(0)
+{
+    setFixedSize(400, 400);
+    std::srand(std::time(nullptr));
+    initializePellets();
+    initializeWalls();
+    connect(timer, &QTimer::timeout, this, &MainWindow::gameLoop);
+    timer->start(100);
+    lives = 3; // initialize
+    level = 1;
+    gameRunning = false;
+    timer->stop(); // start manually with spacebar
+    QMessageBox::information(this, "Instructions",
+                             "Controls:\n"
+                             "- Space: Start\n"
+                             "- P: Pause/Resume\n"
+                             "- R: Restart\n"
+                              "- Esc: Quit\n"
+                             "- Arrow Keys: Move Pacman");
+
+
+    bgMusic = new QMediaPlayer(this);
+    audioOutput = new QAudioOutput(this);
+    bgMusic->setAudioOutput(audioOutput);
+
+
+    bgMusic->setSource(QUrl("qrc:/sound/sounds/the-pacman-variations-17844.mp3")); // Your resource path here
+
+
+    audioOutput->setVolume(0.3);  // Volume: 30%
+    bgMusic->play();
+
+
+
+
+}
+
+
+MainWindow::~MainWindow() {}
+
+
+//void MainWindow::keyPressEvent(QKeyEvent *event) {
+  //  pacman->setDirection(event->key());
+//}
+
+
+
+
+
+
+void MainWindow::initializeWalls() {
+    // Example: horizontal wall across the middle
+    for (int x = 60; x <= 320; x += 20) {
+        walls.append(QPoint(x, 200)); // Horizontal line
+    }
+
+
+    // Example: vertical wall on left side
+    for (int y = 60; y <= 140; y += 20) {
+        walls.append(QPoint(100, y)); // Vertical line
+    }
+
+
+    // Add more as needed to shape your maze
+}
+
+
+
+
+void MainWindow::moveEnemy() {
+    enemyPos.rx() += enemyDx;
+    enemyPos.ry() += enemyDy;
+
+
+    if (enemyPos.x() <= 0 || enemyPos.x() >= width() - 30) {
+        enemyDx = -enemyDx;
+    }
+    if (enemyPos.y() <= 0 || enemyPos.y() >= height() - 30) {
+        enemyDy = -enemyDy;
+    }
+}
+
+
+void MainWindow::gameLoop() {
+    pacman->move(walls);
+    moveEnemy();
+
+
+    QRect pacmanRect(pacman->getX(), pacman->getY(), 30, 30);
+
+
+    for (int i = 0; i < pellets.size(); ++i) {
+        QRect pelletRect(pellets[i].x(), pellets[i].y(), 10, 10);
+        if (pacmanRect.intersects(pelletRect)) {
+            pellets.remove(i);
+            score++;
+            break;
+        }
+        if (pellets.isEmpty()) {
+            if (level >= 3) { // or any number you want
+                timer->stop();
+                QMessageBox::information(this, "You Win!", "Congratulations, you cleared all levels!");
+                return;
+            }
+
+
+
+
+            initializeWalls();     // optional: change wall layout based on level
+            initializePellets();   // refill pellets
+            resetPositions();
+
+
+            // Increase difficulty
+            int interval = qMax(30, 100 - (level * 10)); // Speed up
+            timer->setInterval(interval);
+        }
+            }
+
+
+    QRect enemyRect(enemyPos.x(), enemyPos.y(), 30, 30);
+    if (pacmanRect.intersects(enemyRect)) {
+        lives--;
+        if (lives <= 0) {
+            timer->stop();
+            QMessageBox::information(this, "Game Over", "You were caught!");
+        } else {
+            resetPositions();
+        }
+    }
+
+
+
+
+    update();
+}
+
+
+void MainWindow::paintEvent(QPaintEvent *) {
+    QPainter painter(this);
+    painter.drawText(10, 40, QString("Lives: %1").arg(lives));
+
+
+    // Draw Pacman
+    pacman->draw(&painter);
+    painter.drawText(10, 60, QString("Level: %1").arg(level));
+
+
+    // Draw pellets
+    QPixmap pelletImg(":/images/pics/pellet 2.png"); // Use resource path
+    for (const QPoint &p : pellets) {
+        painter.drawPixmap(p.x(), p.y(), 10, 10, pelletImg);
+    }
+    // Draw walls
+    painter.setBrush(Qt::darkBlue);
+    for (const QPoint &w : walls) {
+        painter.drawRect(w.x(), w.y(), 20, 20);
+    }
+
+
+
+
+    // Draw enemy
+    QPixmap enemyImg(":/images/pics/ghost villian.PNG");
+    painter.drawPixmap(enemyPos.x(), enemyPos.y(), 30, 30, enemyImg);
+
+
+    // Draw score
+    painter.setPen(Qt::black);
+    painter.setFont(QFont("Arial", 14));
+    painter.drawText(10, 20, QString("Score: %1").arg(score));
+}
+void MainWindow::resetPositions() {
+    pacman->setPos(60, 60); // grid-aligned safe start
+    enemyPos = QPoint(100, 100);
+    enemyDx = 10;
+    enemyDy = 0;
+}
+void MainWindow::keyPressEvent(QKeyEvent *event) {
+    if (!gameRunning && event->key() == Qt::Key_Space) {
+        gameRunning = true;
+        timer->start();
+        return;
+    }
+
+
+    if (event->key() == Qt::Key_P) {
+        gameRunning = !gameRunning;
+        if (gameRunning) timer->start();
+        else timer->stop();
+        return;
+    }
+    if (event->key() == Qt::Key_R) {
+        score = 0;
+        lives = 3;
+        level = 1;
+        initializeWalls();
+        initializePellets();
+        resetPositions();
+        gameRunning = true;
+        timer->start();
+        return;
+    }
+    if (event->key() == Qt::Key_Escape) {
+        close();
+        return;
+    }
+
+
+    pacman->setDirection(event->key());
+}
+void MainWindow::initializePellets() {
+    pellets.clear();
+    for (int y = 20; y < 400; y += 20) {
+        for (int x = 20; x < 400; x += 20) {
+            QPoint pt(x, y);
+            QRect pelletRect(pt.x(), pt.y(), 10, 10); // pellet size
+
+
+            bool isWall = false;
+            for (const QPoint &wall : walls) {
+                QRect wallRect(wall.x(), wall.y(), 20, 20); // wall size
+                if (pelletRect.intersects(wallRect)) {
+                    isWall = true;
+                    break;
+                }
+            }
+
+
+            if (!isWall) {
+                pellets.append(pt);
+            }
+        }
+    }
+}
+
+
+//mainwindow.h
+#ifndef MAINWINDOW_H
+#define MAINWINDOW_H
+#include <QMainWindow>
+#include <QTimer>
+#include <QVector>
+#include <QPoint>
+#include <QMediaPlayer>
+#include <QAudioOutput>   // Qt6 for audio output control (Qt5 uses setMedia directly)
+
+
+#include "pacman.h"
+class MainWindow : public QMainWindow {
+    Q_OBJECT
+public:
+    MainWindow(QWidget *parent = nullptr);
+    ~MainWindow();
+protected:
+    void keyPressEvent(QKeyEvent *event) override; // Handles keyboard input
+    void paintEvent(QPaintEvent *event) override;  // Responsible for drawing the game screen
+private slots:
+    void gameLoop(); // Runs every tick to update game logic
+private:
+    QMediaPlayer *bgMusic;
+    QAudioOutput *audioOutput;
+    int level;
+    bool gameRunning;
+
+
+    int lives; // Add this to private section
+    void resetPositions(); // Utility to reset Pacman/enemy
+
+
+    Pacman *pacman; // Pacman character instance
+    QTimer *timer;  // Timer to control game updates
+    int score;      // Player score
+    QVector<QPoint> pellets; // Vector holding pellet positions
+    void initializePellets(); // Setup initial pellet layout
+    QVector<QPoint> walls; // Positions of wall tiles
+    void initializeWalls(); // Function to define wall layout
+
+
+    // Enemy logic
+    QPoint enemyPos; // Current position of the enemy
+    int enemyDx, enemyDy; // Direction of enemy movement
+    void moveEnemy(); // Update enemy position
+
+
+};
+#endif // MAINWINDOW_H
+
+
+//---------
+
+
+//pacman.cpp
+#include "pacman.h"
+#include <QKeyEvent>
+#include <QPixmap>
+
+
+
+
+// Constructor to position the pacman in its initial position
+Pacman::Pacman(QWidget *parent)
+    : QWidget(parent), x(60), y(60), dx(0), dy(0) {}
+
+
+// Set direction based on key press
+void Pacman::setDirection(int key) {
+    switch (key) {
+    case Qt::Key_Up:
+        dx = 0;
+        dy = -10; // Move up (negative y direction)
+        break;
+    case Qt::Key_Down:
+        dx = 0;
+        dy = 10; // Move down (positive y direction)
+        break;
+    case Qt::Key_Left:
+        dx = -10;
+        dy = 0; // Move left (negative x direction)
+        break;
+    case Qt::Key_Right:
+        dx = 10;
+        dy = 0; // Move right (positive x direction)
+        break;
+    default:
+        break;
+    }
+}
+
+
+// Update Pacman's position
+void Pacman::move(const QVector<QPoint> &walls) {
+    int newX = x + dx;
+    int newY = y + dy;
+    QRect nextRect(newX+5, newY+5, 20, 20);
+
+
+    for (const QPoint &wall : walls) {
+        QRect wallRect(wall.x(), wall.y(), 20, 20);
+        if (nextRect.intersects(wallRect)) {
+            return; // Blocked by wall
+        }
+    }
+
+
+    x = newX;
+    y = newY;
+
+
+    if (x < 0) x = 0;
+    if (x > 370) x = 370;
+    if (y < 0) y = 0;
+    if (y > 370) y = 370;
+}
+
+
+
+
+// Draw Pacman using an image
+void Pacman::draw(QPainter *painter) {
+    QPixmap pacmanImg(":/images/pics/pacman.png");
+    painter->drawPixmap(x, y, 20, 20, pacmanImg);
+}
+void Pacman::setPos(int newX, int newY) {
+    x = newX;
+    y = newY;
+}
+
+
+//----
+//pacman.h
+
+
+
+
+#ifndef PACMAN_H
+#define PACMAN_H
+#include <QWidget>
+#include <QPainter>
+class Pacman : public QWidget {
+    Q_OBJECT
+public:
+    explicit Pacman(QWidget *parent = nullptr);
+    void move(const QVector<QPoint> &walls); // New: checks collisions // Update Pacman's position
+    void draw(QPainter *painter); // Draw Pacman
+    void setDirection(int key); // Change movement direction
+    // FILL THE BELLOW SETTER AND GETTER TO RETURN THE X AND Y POSITION
+    int getX() { return x; }
+    int getY() { return y; }
+    void setPos(int newX, int newY);
+
+
+private:
+    int x, y;   // Pacman's position
+    int dx, dy; // Movement vector
+};
+#endif // PACMAN_H
